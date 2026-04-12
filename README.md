@@ -8,8 +8,8 @@ A modern MERN stack application for dermatological analysis using Google Gemini 
 `cd backend`
 2. Install dependencies (if not already installed):
 `npm install`
-3. Duplicate `.env.example` to a new `.env` file, and fill in your Cloudinary API keys and Gemini API key. Ensure MongoDB is running locally on port 27017 or provide a MongoDB URI.
-4. Start the server:
+3. Add `.env` file, and fill in your Cloudinary API keys and Gemini API key. Ensure MongoDB is running locally on port 27017 or provide a MongoDB URI.
+5. Start the server:
 `npm run server`
 
 ### Frontend Setup
