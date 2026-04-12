@@ -1,0 +1,96 @@
+# =========================
+# NODE.JS
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# =========================
+# REACT / FRONTEND
+# =========================
+build/
+dist/
+.next/
+out/
+
+# Vite
+.vite/
+
+# =========================
+# PYTHON (YOLO)
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc.*
+*.pkl
+
+# virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# =========================
+# YOLO / ML FILES (VERY IMPORTANT)
+# =========================
+runs/                  # training outputs
+weights/               # model weights
+*.pt                   # trained models (best.pt etc)
+*.onnx
+*.engine
+
+# datasets (optional - large files)
+dataset/
+data/
+images/
+labels/
+
+# =========================
+# UPLOADS (FROM NODE)
+# =========================
+uploads/
+temp/
+tmp/
+
+# =========================
+# CACHE / TOOLING
+# =========================
+.cache/
+.parcel-cache/
+coverage/
+
+# =========================
+# IDE / EDITOR
+# =========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# =========================
+# MISC
+# =========================
+*.zip
+*.tar
+*.gz
+*.rar
+
+# =========================
+# OPTIONAL (if using docker)
+# =========================
+docker-compose.override.yml
