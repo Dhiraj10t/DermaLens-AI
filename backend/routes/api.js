@@ -7,19 +7,24 @@ const Scan = require('../models/Scan');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const util = require('util');
+const execFile = util.promisify(require('child_process').execFile);
 
-// Configure Cloudinary
+// =======================
+// CONFIG
+// =======================
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Configure Multer to save temporarily to disk
 const upload = multer({ dest: os.tmpdir() });
-
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// =======================
+// MAIN ANALYZE ROUTE
+// =======================
 router.post('/analyze', upload.single('image'), async (req, res) => {
   let imagePath = null;
 
@@ -31,41 +36,46 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
     imagePath = req.file.path;
     const mimeType = req.file.mimetype;
 
-    // 1. Upload to Cloudinary
+    // =======================
+    // 1. CLOUDINARY UPLOAD
+    // =======================
     let cloudinaryUrl = '';
-    if (process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_KEY !== 'your_api_key') {
+
+    try {
       const uploadResult = await cloudinary.uploader.upload(imagePath, {
         folder: 'skinsight'
       });
       cloudinaryUrl = uploadResult.secure_url;
-    } else {
-      cloudinaryUrl = 'https://res.cloudinary.com/demo/image/upload/sample.jpg';
+    } catch (err) {
+      console.warn("Cloudinary failed, using fallback");
+      cloudinaryUrl = '';
     }
 
-    // 2. Gemini Model (LOW RANDOMNESS)
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash-lite",
-      generationConfig: {
-        temperature: 0,   // 🔥 IMPORTANT → deterministic output
-        topP: 1,
-        topK: 1
-      }
-    });
+    // =======================
+    // 2. GEMINI ANALYSIS
+    // =======================
+    let parsedResult = null;
 
-    const fileData = {
-      inlineData: {
-        data: fs.readFileSync(imagePath).toString("base64"),
-        mimeType: mimeType
-      }
-    };
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: "gemini-2.5-flash-lite",
+          generationConfig: {
+            temperature: 0,
+            topP: 1,
+            topK: 1
+          }
+        });
 
-    const prompt = `You are a strict dermatology analyzer.
+        const fileData = {
+          inlineData: {
+            data: fs.readFileSync(imagePath).toString("base64"),
+            mimeType
+          }
+        };
 
-RULES:
-- Be consistent for the same image
-- Count visible acne lesions carefully
-- DO NOT guess randomly
-- Always return valid JSON
+        const prompt = `
+You are a strict dermatology analyzer.
 
 Return ONLY JSON:
 {
@@ -77,58 +87,85 @@ Return ONLY JSON:
 }
 `;
 
-    let parsedResult = null;
+        const result = await model.generateContent([prompt, fileData]);
+        const text = result.response.text();
 
-    if (process.env.GEMINI_API_KEY) {
-      const result = await model.generateContent([prompt, fileData]);
-      const text = result.response.text();
-
-      try {
-        let jsonStr = text
-          .replace(/```json/g, '')
-          .replace(/```/g, '')
-          .trim();
-
+        let jsonStr = text.replace(/```json|```/g, '').trim();
         parsedResult = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("Parse error:", text);
 
-        // 🔥 fallback safe result
-        parsedResult = {
-          acneSeverity: "mild",
-          estimatedLesionCount: 10,
-          pigmentationLevel: "medium",
-          affectedZones: ["cheeks"],
-          skincareRecommendations: ["Use gentle cleanser", "Apply sunscreen"]
-        };
+      } catch (err) {
+        console.warn("Gemini failed, using fallback");
       }
-    } else {
+    }
+
+    // =======================
+    // 3. FALLBACK (SAFE)
+    // =======================
+    if (!parsedResult) {
       parsedResult = {
         acneSeverity: "mild",
-        estimatedLesionCount: 5,
+        estimatedLesionCount: 8,
         pigmentationLevel: "medium",
-        affectedZones: ["cheeks", "forehead"],
-        skincareRecommendations: ["Use salicylic acid cleanser", "Apply niacinamide serum"]
+        affectedZones: ["cheeks"],
+        skincareRecommendations: [
+          "Use gentle cleanser",
+          "Apply sunscreen",
+          "Avoid touching face"
+        ]
       };
     }
 
-    // 🔥 POST-PROCESSING (VERY IMPORTANT)
+    // =======================
+    // 4. YOLO DETECTION
+    // =======================
+    let yoloBoundingBoxes = [];
 
+    try {
+      const yoloScriptPath = path.join(__dirname, '../yolo_service.py');
+
+      const { stdout } = await execFile(
+        'python',
+        [yoloScriptPath, imagePath],
+        { timeout: 10000 } // ⏱️ prevent hanging
+      );
+
+      const parsed = JSON.parse(stdout);
+
+      if (Array.isArray(parsed)) {
+        yoloBoundingBoxes = parsed;
+      } else if (parsed.error) {
+        console.error("YOLO error:", parsed.error);
+      }
+
+    } catch (err) {
+      console.error("YOLO failed:", err.message);
+    }
+
+    parsedResult.boundingBoxes = yoloBoundingBoxes;
+
+    // =======================
+    // 5. POST PROCESSING
+    // =======================
     const count = parsedResult.estimatedLesionCount || 0;
 
-    // Make severity consistent
     if (count <= 5) parsedResult.acneSeverity = "mild";
     else if (count <= 20) parsedResult.acneSeverity = "moderate";
     else parsedResult.acneSeverity = "severe";
 
-    // Normalize zones
-    parsedResult.affectedZones = Array.isArray(parsedResult.affectedZones)
-      ? parsedResult.affectedZones
-      : ["cheeks"];
+    if (!Array.isArray(parsedResult.affectedZones)) {
+      parsedResult.affectedZones = ["cheeks"];
+    }
 
-    // cleanup
-    fs.unlinkSync(imagePath);
+    // =======================
+    // 6. CLEANUP
+    // =======================
+    if (imagePath && fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
 
+    // =======================
+    // 7. RESPONSE
+    // =======================
     res.json({
       imageUrl: cloudinaryUrl,
       analysis: parsedResult
@@ -145,11 +182,22 @@ Return ONLY JSON:
   }
 });
 
-// Save scan result
+
+// =======================
+// SAVE SCAN
+// =======================
 router.post('/scans', async (req, res) => {
   try {
-    const { userId, imageUrl, acneSeverity, lesionCount, pigmentationLevel, zones, recommendations } = req.body;
-    
+    const {
+      userId,
+      imageUrl,
+      acneSeverity,
+      lesionCount,
+      pigmentationLevel,
+      zones,
+      recommendations
+    } = req.body;
+
     const newScan = new Scan({
       userId: userId || 'guest_user',
       imageUrl,
@@ -159,23 +207,30 @@ router.post('/scans', async (req, res) => {
       zones,
       recommendations
     });
-    
+
     await newScan.save();
     res.status(201).json(newScan);
+
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get all scans
+
+// =======================
+// GET SCANS
+// =======================
 router.get('/scans', async (req, res) => {
   try {
     const userId = req.query.userId || 'guest_user';
-    const scans = await Scan.find({ userId }).sort({ createdAt: -1 });
+
+    const scans = await Scan
+      .find({ userId })
+      .sort({ createdAt: -1 });
+
     res.json(scans);
+
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
