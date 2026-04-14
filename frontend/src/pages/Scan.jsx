@@ -3,8 +3,11 @@ import ImageUploader from '../components/ImageUploader';
 import FaceMeshOverlay from '../components/FaceMeshOverlay';
 import AnalysisResults from '../components/AnalysisResults';
 import { Loader2, Activity } from 'lucide-react';
+import AuthContext from '../context/AuthContext';
+import { useContext } from 'react';
 
 export default function Scan() {
+  const { user } = useContext(AuthContext);
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -26,8 +29,9 @@ export default function Scan() {
     formData.append('image', imageFile);
 
     try {
-      const response = await fetch('http://localhost:5000/api/analyze', {
+      const response = await fetch('http://localhost:5000/api/scans/analyze', {
         method: 'POST',
+        headers: user ? { Authorization: `Bearer ${user.token}` } : {},
         body: formData,
       });
 
@@ -39,21 +43,25 @@ export default function Scan() {
 
       if (data.analysis) {
         setAnalysisResult(data.analysis);
-
-        // ✅ Save scan
-        await fetch('http://localhost:5000/api/scans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: 'user_123',
-            imageUrl: data.imageUrl || imageUrl,
-            acneSeverity: data.analysis.acneSeverity,
-            lesionCount: data.analysis.estimatedLesionCount,
-            pigmentationLevel: data.analysis.pigmentationLevel,
-            zones: data.analysis.affectedZones,
-            recommendations: data.analysis.skincareRecommendations
-          })
-        });
+        
+        // Save scan automatically only if user is logged in
+        if (user) {
+          await fetch('http://localhost:5000/api/scans', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${user.token}` 
+            },
+            body: JSON.stringify({
+              imageUrl: data.imageUrl || imageUrl,
+              acneSeverity: data.analysis.acneSeverity,
+              lesionCount: data.analysis.estimatedLesionCount,
+              pigmentationLevel: data.analysis.pigmentationLevel,
+              zones: data.analysis.affectedZones,
+              recommendations: data.analysis.skincareRecommendations
+            })
+          });
+        }
       }
     } catch (error) {
       console.log('Analysis failed:', error);
