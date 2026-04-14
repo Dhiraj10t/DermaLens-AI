@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
+import AuthContext from '../context/AuthContext';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, BarElement
@@ -7,11 +8,19 @@ import {
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
 export default function Dashboard() {
+  const { user } = useContext(AuthContext);
   const [scans, setScans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/scans?userId=user_123')
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    
+    fetch('http://localhost:5000/api/scans', {
+      headers: { Authorization: `Bearer ${user.token}` }
+    })
       .then(res => res.json())
       .then(data => {
         // Reverse to show oldest to newest on charts
@@ -26,6 +35,10 @@ export default function Dashboard() {
 
   if (isLoading) {
     return <div className="flex-grow flex items-center justify-center">Loading progress...</div>;
+  }
+
+  if (!user) {
+    return <div className="flex-grow flex items-center justify-center text-slate-400">Please register or login to save and view your scan dashboard.</div>;
   }
 
   if (scans.length === 0) {

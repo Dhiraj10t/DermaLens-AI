@@ -1,10 +1,17 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { Activity, Camera, Home as HomeIcon } from 'lucide-react';
+import { Activity, Camera, Home as HomeIcon, LogOut, User } from 'lucide-react';
 import Home from './pages/Home';
 import Scan from './pages/Scan';
 import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { AuthProvider } from './context/AuthContext';
+import AuthContext from './context/AuthContext';
+import { useContext } from 'react';
 
-function App() {
+function AppContent() {
+  const { user, logout } = useContext(AuthContext);
+
   return (
     <Router>
       <div className="min-h-screen flex flex-col bg-slate-900 text-slate-100 font-sans">
@@ -14,9 +21,9 @@ function App() {
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-2">
                 <Activity className="h-8 w-8 text-blue-500" />
-                <span className="text-xl font-bold heading-gradient tracking-tight">SkinSight AI</span>
+                <span className="text-xl font-bold heading-gradient tracking-tight">DermaLens AI</span>
               </div>
-              <div className="flex space-x-6">
+              <div className="flex space-x-6 items-center">
                 <Link to="/" className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors">
                   <HomeIcon className="h-5 w-5" />
                   <span className="hidden sm:inline">Home</span>
@@ -25,10 +32,29 @@ function App() {
                   <Camera className="h-5 w-5" />
                   <span className="hidden sm:inline">Scan</span>
                 </Link>
-                <Link to="/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors">
-                  <Activity className="h-5 w-5" />
-                  <span className="hidden sm:inline">Dashboard</span>
-                </Link>
+                
+                {user ? (
+                  <>
+                    <Link to="/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors">
+                      <Activity className="h-5 w-5" />
+                      <span className="hidden sm:inline">Dashboard</span>
+                    </Link>
+                    <button onClick={logout} className="flex items-center gap-2 text-red-400 hover:text-red-300 transition-colors bg-transparent border-0 cursor-pointer">
+                      <LogOut className="h-5 w-5" />
+                      <span className="hidden sm:inline">Logout</span>
+                    </button>
+                    <span className="text-sm border ml-2 border-green-500/30 bg-green-500/10 text-green-400 px-2 py-1 rounded">
+                       {user.name}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/login" className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors">
+                      <User className="h-5 w-5" />
+                      <span className="hidden sm:inline">Login</span>
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -40,10 +66,20 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/scan" element={<Scan />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
           </Routes>
         </main>
       </div>
     </Router>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 
 const scanSchema = new mongoose.Schema({
   userId: {
-    type: String,
-    required: true,
-    default: 'guest_user'
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   imageUrl: {
     type: String,
